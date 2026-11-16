@@ -49,12 +49,16 @@ def collect():
             if not p.exists() or p.name in SKIP_NAMES:
                 continue
             rel = p.relative_to(ROOT).as_posix()
-            # Java のパッケージは長いので一覧の見出しでは src/main/java/com/example/... を縮める
-            d = p.parent.relative_to(ROOT).as_posix()
+            # 一覧では「src/main 配下(アプリ本体)」と「それ以外(Gradle設定・SQL・テストなど)」を分けて表示する
+            main_dir = app / 'src' / 'main'
+            is_main = main_dir in p.parents
+            # src/main 配下は見出しから <アプリ>/src/main/ を省いて短くする
+            d = p.parent.relative_to(main_dir).as_posix() if is_main else p.parent.relative_to(ROOT).as_posix()
             parts = rel.split('/')
             role = next((ROLE[x] for x in reversed(parts[:-1]) if x in ROLE), '')
             lang = EXT_LANG.get(p.suffix, '')
-            files.append({'path': rel, 'dir': d, 'name': p.name, 'role': role, 'lang': lang,
+            files.append({'path': rel, 'dir': d, 'sec': 'main' if is_main else 'other',
+                          'name': p.name, 'role': role, 'lang': lang,
                           'text': p.read_text(encoding='utf-8').replace('\r\n', '\n').rstrip('\n'),
                           'main': p.name == MAIN_FILE,
                           # 質問時に「他のファイル」として渡すもの(Gradle の生成物などは無いので全部渡す)
@@ -62,9 +66,11 @@ def collect():
     for name in ('HISTORY.md',):
         p = ROOT / name
         if p.exists():
-            files.append({'path': name, 'dir': '学習メモ', 'name': name, 'role': '進捗・Q&A', 'lang': 'markdown',
+            files.append({'path': name, 'dir': '学習メモ', 'sec': 'other', 'name': name, 'role': '進捗・Q&A', 'lang': 'markdown',
                           'text': p.read_text(encoding='utf-8').replace('\r\n', '\n').rstrip('\n'),
                           'main': False, 'ctx': True})
+    # src/main 配下を先に並べる(同じ区分の中は元の順番のまま)
+    files.sort(key=lambda f: f['sec'] != 'main')
     return files
 
 
