@@ -1,0 +1,13 @@
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Spring Boot-Todolist7xApplication<todolist7x>",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/todolist7x",
+      "mainClass": "com.example.todolist.Todolist7xApplication",
+      "projectName": "Todolist7x",
+      "args": ""
+    }
+  ]
+}

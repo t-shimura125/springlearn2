@@ -1,0 +1,5 @@
+# 参考書から取得した元のソース(写経元。todolist7x/ にコピー済み)
+sampleSource/
+
+# Python
+__pycache__/

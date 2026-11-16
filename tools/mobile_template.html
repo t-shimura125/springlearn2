@@ -1,0 +1,494 @@
+<title>springlearn2 ソースノート</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDGothic:wght@400;700&family=BIZ+UDPGothic:wght@400;700&display=swap">
+<style>
+/* 通勤中に片手で読む。上部にファイル切替を固定、コードは行番号つきで横スクロール、質問は下から出るシート */
+:root {
+  --bg: #f1f3ef;
+  --surface: #ffffff;
+  --code-bg: #fbfcfa;
+  --fg: #1d2420;
+  --muted: #5f6b64;
+  --line: #d6ddd6;
+  --accent: #2c6a4c;
+  --accent-soft: #e1eee6;
+  --sel: #fff0c2;
+  --sel-edge: #c98a00;
+  --kw: #8a2f6b;
+  --str: #2d6a1f;
+  --com: #7a8580;
+  --num: #a14e00;
+  --type: #1f5c8a;
+  --anno: #8a6d00;
+  --font-body: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+  --font-code: "BIZ UDGothic", "Osaka-Mono", "MS Gothic", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121714; --surface: #1a201c; --code-bg: #151a17; --fg: #e3ebe5; --muted: #98a59d; --line: #2c3530;
+    --accent: #79c79c; --accent-soft: #1e3328; --sel: #3d3417; --sel-edge: #e2b13c;
+    --kw: #e59ad0; --str: #9fd48a; --com: #7f8c85; --num: #f0b070; --type: #8cc3ee; --anno: #e3c766;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121714; --surface: #1a201c; --code-bg: #151a17; --fg: #e3ebe5; --muted: #98a59d; --line: #2c3530;
+  --accent: #79c79c; --accent-soft: #1e3328; --sel: #3d3417; --sel-edge: #e2b13c;
+  --kw: #e59ad0; --str: #9fd48a; --com: #7f8c85; --num: #f0b070; --type: #8cc3ee; --anno: #e3c766;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.7; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 880px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 120px; }
+button, textarea, input { font: inherit; color: inherit; }
+button:focus-visible, textarea:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 上部の固定バー */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px 8px; border-bottom: 1px solid var(--line); }
+.top h1 { margin: 0; font-size: 16px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.top h1 small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.tabs { display: flex; gap: 6px; margin-top: 8px; }
+.tabs button { flex: none; font-size: 14px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 700; }
+.picker { margin-top: 8px; display: flex; gap: 8px; }
+.picker button.file { flex: 1; min-width: 0; text-align: left; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.picker .file .path { font-family: var(--font-code); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.picker .file .chev { margin-left: auto; color: var(--muted); flex: none; }
+
+/* ファイル一覧 */
+.files { margin-top: 10px; display: flex; flex-direction: column; gap: 14px; }
+.files input { width: 100%; font-size: 16px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.dir h2 { margin: 0 0 4px; font-size: 12px; font-weight: 400; color: var(--muted); font-family: var(--font-code); letter-spacing: .02em; overflow-wrap: anywhere; }
+.dir ul { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.dir li + li { border-top: 1px solid var(--line); }
+.dir button { width: 100%; text-align: left; background: none; border: 0; padding: 9px 12px; cursor: pointer; display: flex; gap: 10px; align-items: baseline; }
+.dir button .name { font-family: var(--font-code); font-size: 14px; overflow-wrap: anywhere; min-width: 0; }
+.dir button .role { margin-left: auto; font-size: 12px; color: var(--muted); flex: none; }
+.dir button[aria-current="true"] { background: var(--accent-soft); font-weight: 700; }
+.hit { font-size: 12px; color: var(--muted); font-family: var(--font-code); padding: 0 12px 8px; margin-top: -4px; overflow-wrap: anywhere; }
+.hit mark { background: var(--sel); color: var(--fg); }
+
+/* コード */
+.filehead { margin: 14px 0 6px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.filehead .name { font-family: var(--font-code); font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+.filehead .sub { font-size: 12px; color: var(--muted); }
+.hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; font-family: var(--font-code); font-size: 13px; line-height: 1.65; -webkit-text-size-adjust: 100%; }
+.code table { border-collapse: collapse; min-width: 100%; }
+.code td { padding: 0; vertical-align: top; }
+.code .ln { position: sticky; left: 0; background: var(--code-bg); color: var(--muted); text-align: right; padding: 0 8px 0 6px; user-select: none; cursor: pointer; border-right: 1px solid var(--line); font-variant-numeric: tabular-nums; min-width: 38px; }
+.code .src { padding: 0 12px 0 10px; white-space: pre; }
+.code tr:first-child td { padding-top: 8px; }
+.code tr:last-child td { padding-bottom: 8px; }
+.code tr.on .ln { background: var(--sel); color: var(--fg); font-weight: 700; box-shadow: inset 3px 0 0 var(--sel-edge); }
+.code tr.on .src { background: var(--sel); }
+
+/* ハイライト(highlight.js のクラス) */
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag, .hljs-tag .hljs-name { color: var(--kw); }
+.hljs-string, .hljs-attr .hljs-string, .hljs-selector-class { color: var(--str); }
+.hljs-comment, .hljs-quote { color: var(--com); font-style: italic; }
+.hljs-number { color: var(--num); }
+.hljs-title, .hljs-type, .hljs-class .hljs-title, .hljs-attr, .hljs-attribute, .hljs-property { color: var(--type); }
+.hljs-meta, .hljs-variable, .hljs-template-variable { color: var(--anno); }
+
+/* 質問シート */
+.askbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--bg); border-top: 1px solid var(--line); }
+.askbar .in { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+.askbar .ctx { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.askbar .ctx b { color: var(--fg); font-family: var(--font-code); font-weight: 400; overflow-wrap: anywhere; }
+.askbar .ctx button { font-size: 12px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
+.askrow { display: flex; gap: 8px; align-items: flex-end; }
+.askrow textarea { flex: 1; min-width: 0; resize: none; font-size: 16px; line-height: 1.5; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); max-height: 30vh; }
+.btn { flex: none; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); font-weight: 700; cursor: pointer; }
+.btn.ghost { background: var(--surface); color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.noask { font-size: 13px; color: var(--muted); }
+
+/* 回答・質問ログ */
+.thread { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.turn { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 0; }
+.turn.q { background: var(--accent-soft); border-color: transparent; }
+.turn .who { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.turn .q-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.md { overflow-wrap: anywhere; min-width: 0; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h3, .md h4 { font-size: 15px; margin: 14px 0 4px; }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 1.4em; }
+.md code { font-family: var(--font-code); font-size: 13px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; }
+.md pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-x: auto; font-family: var(--font-code); font-size: 13px; line-height: 1.6; }
+.md pre code { background: none; border: 0; padding: 0; }
+.thinking { color: var(--muted); font-size: 13px; }
+.err { color: var(--sel-edge); font-size: 13px; }
+.log { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+details.entry { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+details.entry > summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
+details.entry > summary::-webkit-details-marker { display: none; }
+details.entry .meta { font-size: 12px; color: var(--muted); font-family: var(--font-code); overflow-wrap: anywhere; }
+details.entry .first { overflow-wrap: anywhere; }
+details.entry .body { padding: 0 14px 12px; border-top: 1px solid var(--line); }
+details.entry .body .thread { margin-top: 10px; }
+details.entry .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.empty { color: var(--muted); font-size: 14px; padding: 16px 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1><span id="appName">springlearn2</span><small id="built"></small></h1>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabCode" aria-selected="true">コード</button>
+      <button role="tab" id="tabFiles" aria-selected="false">ファイル一覧</button>
+      <button role="tab" id="tabLog" aria-selected="false">質問ログ <span id="logN"></span></button>
+    </div>
+    <div class="picker" id="picker">
+      <button class="file" id="fileBtn"><span class="path" id="curPath"></span><span class="chev">▾</span></button>
+    </div>
+  </header>
+
+  <section id="viewCode">
+    <div class="filehead"><span class="name" id="curName"></span><span class="sub" id="curSub"></span></div>
+    <p class="hint">行番号をタップすると選択、もう1行タップで範囲選択。選んだ行について下の欄から質問できます。</p>
+    <div class="code" id="code"></div>
+    <div class="thread" id="thread"></div>
+  </section>
+
+  <section id="viewFiles" hidden>
+    <div class="files">
+      <input id="q" type="search" placeholder="ファイル名・コードを検索(例: PageableDefault)" autocomplete="off">
+      <div id="tree" class="files"></div>
+    </div>
+  </section>
+
+  <section id="viewLog" hidden>
+    <div class="log" id="log"></div>
+  </section>
+</div>
+
+<div class="askbar" id="askbar">
+  <div class="in">
+    <div class="ctx" id="ctx"></div>
+    <div class="askrow" id="askrow">
+      <textarea id="askText" rows="1" placeholder="このコードについて質問する"></textarea>
+      <button class="btn" id="askBtn">質問</button>
+    </div>
+    <div class="noask" id="noask" hidden></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/groovy.min.js"></script>
+<script>
+const DATA = /*__DATA__*/null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+
+const files = DATA.files;
+const byPath = Object.fromEntries(files.map(f => [f.path, f]));
+let cur = byPath[store.get('file')] || files.find(f => f.main) || files[0];
+let sel = null;          // {from, to} 1始まり
+let thread = null;       // 現在の会話 {id, file, lines, turns:[{q,a}]}
+let sample = null, db = null, ctl = null;
+
+$('built').textContent = '生成 ' + DATA.built;
+
+/* ---------- タブ ---------- */
+function show(tab) {
+  for (const [t, v] of [['tabCode', 'viewCode'], ['tabFiles', 'viewFiles'], ['tabLog', 'viewLog']]) {
+    $(t).setAttribute('aria-selected', String(t === tab));
+    $(v).hidden = t !== tab;
+  }
+  $('picker').hidden = tab !== 'tabCode';
+  $('askbar').hidden = tab !== 'tabCode';
+  window.scrollTo(0, 0);
+}
+$('tabCode').onclick = () => show('tabCode');
+$('tabFiles').onclick = () => { show('tabFiles'); renderTree(); };
+$('tabLog').onclick = () => show('tabLog');
+$('fileBtn').onclick = () => { show('tabFiles'); renderTree(); };
+
+/* ---------- ファイル一覧 ---------- */
+function renderTree() {
+  const q = $('q').value.trim().toLowerCase();
+  const groups = new Map();
+  for (const f of files) {
+    let hit = '';
+    if (q) {
+      if (!f.path.toLowerCase().includes(q)) {
+        const i = f.text.toLowerCase().indexOf(q);
+        if (i < 0) continue;
+        const ls = f.text.lastIndexOf('\n', i) + 1, le = f.text.indexOf('\n', i);
+        const lineNo = f.text.slice(0, i).split('\n').length;
+        const line = f.text.slice(ls, le < 0 ? undefined : le).trim();
+        const j = line.toLowerCase().indexOf(q);
+        hit = `${lineNo}: ` + esc(line.slice(0, j)) + '<mark>' + esc(line.slice(j, j + q.length)) + '</mark>' + esc(line.slice(j + q.length));
+      }
+    }
+    if (!groups.has(f.dir)) groups.set(f.dir, []);
+    groups.get(f.dir).push({ f, hit });
+  }
+  const tree = $('tree');
+  tree.innerHTML = groups.size ? '' : '<p class="empty">見つかりませんでした。</p>';
+  for (const [dir, list] of groups) {
+    const div = document.createElement('div');
+    div.className = 'dir';
+    div.innerHTML = `<h2>${esc(dir || '(ルート)')}</h2><ul></ul>`;
+    for (const { f, hit } of list) {
+      const li = document.createElement('li');
+      li.innerHTML = `<button aria-current="${f === cur}"><span class="name">${esc(f.name)}</span><span class="role">${esc(f.role || '')}</span></button>` + (hit ? `<div class="hit">${hit}</div>` : '');
+      li.querySelector('button').onclick = () => { open(f); show('tabCode'); };
+      div.querySelector('ul').appendChild(li);
+    }
+    tree.appendChild(div);
+  }
+}
+$('q').addEventListener('input', renderTree);
+
+/* ---------- コード表示 ---------- */
+function highlight(text, lang) {
+  try {
+    if (window.hljs && lang && hljs.getLanguage(lang)) return hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
+  } catch (e) {}
+  return esc(text);
+}
+// ハイライト後の HTML を行ごとに分ける(行をまたぐ span を閉じて次の行で開き直す)
+function splitLines(html) {
+  const out = [];
+  let open = [], line = '';
+  const re = /(<span[^>]*>)|(<\/span>)|(\n)|([^<\n]+|<)/g;
+  let m;
+  while ((m = re.exec(html))) {
+    if (m[1]) { open.push(m[1]); line += m[1]; }
+    else if (m[2]) { open.pop(); line += m[2]; }
+    else if (m[3]) { out.push(line + '</span>'.repeat(open.length)); line = open.join(''); }
+    else line += m[4];
+  }
+  out.push(line + '</span>'.repeat(open.length));
+  return out;
+}
+function open(f) {
+  cur = f; sel = null; thread = null;
+  store.set('file', f.path);
+  $('curPath').textContent = f.path;
+  $('curName').textContent = f.name;
+  $('curSub').textContent = (f.role ? f.role + ' / ' : '') + f.text.split('\n').length + '行';
+  const rows = splitLines(highlight(f.text, f.lang));
+  $('code').innerHTML = '<table><tbody>' + rows.map((h, i) => `<tr data-n="${i + 1}"><td class="ln">${i + 1}</td><td class="src">${h || ' '}</td></tr>`).join('') + '</tbody></table>';
+  $('thread').innerHTML = '';
+  renderCtx();
+}
+$('code').addEventListener('click', e => {
+  const ln = e.target.closest('.ln');
+  if (!ln) return;
+  const n = +ln.parentElement.dataset.n;
+  if (!sel) sel = { from: n, to: n };
+  else if (sel.from === sel.to && n !== sel.from) sel = { from: Math.min(sel.from, n), to: Math.max(sel.from, n) };
+  else if (n >= sel.from && n <= sel.to) sel = null;
+  else sel = { from: n, to: n };
+  for (const tr of $('code').querySelectorAll('tr')) {
+    const k = +tr.dataset.n;
+    tr.classList.toggle('on', !!sel && k >= sel.from && k <= sel.to);
+  }
+  renderCtx();
+});
+function linesLabel(s) { return s ? (s.from === s.to ? `${s.from}行目` : `${s.from}〜${s.to}行目`) : 'ファイル全体'; }
+function renderCtx() {
+  const c = $('ctx');
+  if (thread && thread.turns.length) {
+    c.innerHTML = `続けて質問: <b>${esc(thread.file.split('/').pop())}</b> ${esc(linesLabel(thread.lines))}`;
+    const b = document.createElement('button');
+    b.textContent = '新しい質問にする';
+    b.onclick = () => { thread = null; $('thread').innerHTML = ''; renderCtx(); };
+    c.appendChild(b);
+  } else {
+    c.innerHTML = `対象: <b>${esc(cur.name)}</b> ${esc(linesLabel(sel))}`;
+  }
+}
+
+/* ---------- Markdown(回答表示用の最小限) ---------- */
+function inline(s) {
+  return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+function md(src) {
+  const lines = src.split('\n');
+  let html = '', i = 0, list = null, para = [];
+  const flush = () => {
+    if (para.length) { html += '<p>' + para.map(inline).join('<br>') + '</p>'; para = []; }
+    if (list) { html += `</${list}>`; list = null; }
+  };
+  while (i < lines.length) {
+    const l = lines[i];
+    const fence = l.match(/^```\s*(\w*)/);
+    if (fence) {
+      flush();
+      const body = [];
+      i++;
+      while (i < lines.length && !/^```/.test(lines[i])) body.push(lines[i++]);
+      i++;
+      html += `<pre><code>${highlight(body.join('\n'), fence[1] === 'html' ? 'xml' : fence[1])}</code></pre>`;
+      continue;
+    }
+    const h = l.match(/^(#{1,4})\s+(.*)/);
+    const ul = l.match(/^\s*[-*]\s+(.*)/);
+    const ol = l.match(/^\s*\d+[.)]\s+(.*)/);
+    if (h) { flush(); html += `<h4>${inline(h[2])}</h4>`; }
+    else if (ul || ol) {
+      if (para.length) { html += '<p>' + para.map(inline).join('<br>') + '</p>'; para = []; }
+      const want = ul ? 'ul' : 'ol';
+      if (list !== want) { if (list) html += `</${list}>`; html += `<${want}>`; list = want; }
+      html += `<li>${inline((ul || ol)[1])}</li>`;
+    }
+    else if (!l.trim()) flush();
+    else { if (list) { html += `</${list}>`; list = null; } para.push(l); }
+    i++;
+  }
+  flush();
+  return html;
+}
+
+/* ---------- 質問 ---------- */
+function numbered(f, s) {
+  const ls = f.text.split('\n');
+  const from = s ? s.from : 1, to = s ? s.to : ls.length;
+  return ls.slice(from - 1, to).map((l, k) => `${from + k}: ${l}`).join('\n');
+}
+function buildPrompt(t, question) {
+  const f = byPath[t.file] || cur;
+  const others = files.filter(x => x !== f && x.ctx).map(x => `### ${x.path}\n${x.text}`).join('\n\n');
+  const rules = `${DATA.guide}
+
+# 今回の質問の対象
+ファイル: ${f.path}
+範囲: ${linesLabel(t.lines)}
+${t.lines ? '\n## 選択された行\n' + numbered(f, t.lines) + '\n' : ''}
+## 対象ファイル全体(行番号つき)
+${numbered(f, null)}
+
+# 参考: 同じプロジェクトの他のファイル
+${others}`;
+  const turns = [{ role: 'user', content: rules + '\n\n# 質問\n' + (t.turns[0] ? t.turns[0].q : question) }];
+  t.turns.forEach((x, k) => {
+    if (k > 0) turns.push({ role: 'user', content: x.q });
+    if (x.a) turns.push({ role: 'assistant', content: x.a });
+  });
+  if (t.turns.length) turns.push({ role: 'user', content: question });
+  return turns;
+}
+function renderThread(el, t, pendingQ, pendingA) {
+  let h = '';
+  for (const x of t.turns) {
+    h += `<div class="turn q"><div class="who">質問</div><div class="q-text">${esc(x.q)}</div></div>`;
+    h += `<div class="turn"><div class="who">Claude</div><div class="md">${md(x.a)}</div></div>`;
+  }
+  if (pendingQ != null) {
+    h += `<div class="turn q"><div class="who">質問</div><div class="q-text">${esc(pendingQ)}</div></div>`;
+    h += `<div class="turn"><div class="who">Claude</div><div class="md">${pendingA ? md(pendingA) : '<span class="thinking">考え中…(数十秒かかることがあります)</span>'}</div></div>`;
+  }
+  el.innerHTML = h;
+}
+const ERR = {
+  not_granted: 'Claude への質問が許可されていません。',
+  rate_limited: '質問が続いたため一時的に止められました。少し待ってからもう一度送ってください。',
+  cancelled: '止めました。',
+};
+async function ask() {
+  const q = $('askText').value.trim();
+  if (!q || !sample) return;
+  if (!thread) thread = { id: null, file: cur.path, lines: sel, turns: [] };
+  const t = thread;
+  const input = buildPrompt(t, q);
+  $('askText').value = ''; autosize();
+  $('askBtn').textContent = '停止';
+  ctl = new AbortController();
+  const el = $('thread');
+  renderThread(el, t, q, '');
+  el.lastElementChild.scrollIntoView({ block: 'nearest' });
+  try {
+    const { text } = await sample(input, { signal: ctl.signal, cache: false, onText: ({ text }) => renderThread(el, t, q, text) });
+    t.turns.push({ q, a: text });
+    renderThread(el, t);
+    saveThread(t);
+  } catch (e) {
+    renderThread(el, t, q, e.text || '');
+    el.insertAdjacentHTML('beforeend', `<p class="err">${esc(ERR[e.code] || 'うまく回答を受け取れませんでした。もう一度送ってください。')}</p>`);
+    if (e.text) { t.turns.push({ q, a: e.text + '\n\n(途中で止まりました)' }); saveThread(t); }
+    if (e.code === 'not_granted') disableAsk();
+  } finally {
+    ctl = null;
+    $('askBtn').textContent = '質問';
+    renderCtx();
+  }
+}
+$('askBtn').onclick = () => { if (ctl) ctl.abort(); else ask(); };
+function autosize() { const a = $('askText'); a.style.height = 'auto'; a.style.height = Math.min(a.scrollHeight, window.innerHeight * 0.3) + 'px'; }
+$('askText').addEventListener('input', autosize);
+function disableAsk() {
+  $('askrow').hidden = true;
+  $('noask').hidden = false;
+  $('noask').textContent = 'ここでは Claude に質問できません。claude.ai のアプリでこのページを開くと質問できます。';
+}
+
+/* ---------- 質問ログ(db) ---------- */
+let logDocs = [];
+async function saveThread(t) {
+  if (!db) return;
+  const body = { file: t.file, lines: t.lines, turns: t.turns, updated: Date.now() };
+  try {
+    if (t.id) await db.collection('qa').doc(t.id).set({ ...body, created: t.created });
+    else { t.created = Date.now(); const ref = await db.collection('qa').add({ ...body, created: t.created }); t.id = ref.id; }
+  } catch (e) {
+    $('thread').insertAdjacentHTML('beforeend', '<p class="err">質問ログに保存できませんでした(回答はこの画面には残っています)。</p>');
+  }
+}
+function fmt(ms) { const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; }
+function renderLog() {
+  const log = $('log');
+  $('logN').textContent = logDocs.length ? `(${logDocs.length})` : '';
+  if (!logDocs.length) { log.innerHTML = '<p class="empty">まだ質問はありません。コード画面の下の欄から質問すると、ここに残ります。</p>'; return; }
+  log.innerHTML = '';
+  for (const d of logDocs) {
+    const x = d.data();
+    const det = document.createElement('details');
+    det.className = 'entry';
+    det.innerHTML = `<summary><span class="meta">${esc(fmt(x.updated || x.created))} ・ ${esc(x.file)} ${esc(linesLabel(x.lines))}</span><span class="first">${esc(x.turns && x.turns[0] ? x.turns[0].q : '')}</span></summary><div class="body"><div class="thread"></div><div class="acts"><button class="btn ghost">このコードを開いて続けて質問</button></div></div>`;
+    det.addEventListener('toggle', () => { if (det.open) renderThread(det.querySelector('.thread'), x); }, { once: true });
+    det.querySelector('.btn').onclick = () => {
+      const f = byPath[x.file];
+      if (!f) return;
+      open(f);
+      if (x.lines) $('code').querySelectorAll('tr').forEach(tr => { const k = +tr.dataset.n; tr.classList.toggle('on', k >= x.lines.from && k <= x.lines.to); });
+      sel = x.lines || null;
+      thread = { id: d.id, created: x.created, file: x.file, lines: x.lines || null, turns: x.turns.slice() };
+      renderThread($('thread'), thread);
+      renderCtx();
+      show('tabCode');
+    };
+    log.appendChild(det);
+  }
+}
+
+/* ---------- 起動 ---------- */
+open(cur);
+renderLog();
+$('log').innerHTML = '<p class="empty">質問ログを読み込み中…</p>';
+(async () => {
+  if (!window.claude) { disableAsk(); $('log').innerHTML = '<p class="empty">質問ログは claude.ai 上で開いたときに表示されます。</p>'; return; }
+  claude.use('sample').then(s => { sample = s; if (!s) disableAsk(); });
+  db = await claude.use('db');
+  if (!db) { $('log').innerHTML = '<p class="empty">質問ログは claude.ai にサインインして開いたときに表示されます。</p>'; return; }
+  const timer = setTimeout(() => { if (!logDocs.length) $('log').innerHTML = '<p class="empty">質問ログにまだ接続できません。電波の良い場所で開き直してください。</p>'; }, 10000);
+  db.collection('qa').orderBy('updated', 'desc').limit(300).onSnapshot(snap => {
+    if (!snap.fromCache) clearTimeout(timer);
+    logDocs = snap.docs;
+    renderLog();
+  }, () => { clearTimeout(timer); $('log').innerHTML = '<p class="empty">質問ログを読み込めませんでした。</p>'; });
+})();
+</script>
