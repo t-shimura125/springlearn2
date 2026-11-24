@@ -3,3 +3,16 @@ sampleSource/
 
 # Python
 __pycache__/
+
+# 参考書の原本(参考ソース/)にある DB パスワード入りの設定ファイルと、Eclipse・ビルドの生成物
+**/src/main/resources/application.properties
+参考ソース/**/bin/
+参考ソース/**/build/
+参考ソース/**/.gradle/
+参考ソース/**/.settings/
+参考ソース/**/.classpath
+参考ソース/**/.project
+# 参考書の原本(章ごとのサンプル)は git 対象外(sampleSource/ と同じ扱い)。
+# ただし back/ はソースノートの「元」として build_mobile.py が読むので追跡する
+参考ソース/*
+!参考ソース/back/

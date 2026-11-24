@@ -27,10 +27,11 @@ Spring Boot学習(シーズン2)用フォルダ `springlearn_season2/` で作業
 
 | パス | 役割 | 扱い |
 |---|---|---|
-| `sampleSource/` | 参考書から取得した元のソース(Eclipse/STSのプロジェクト) | 原本。変更しない。git対象外 |
-| `todolist7x/` | `sampleSource` から src・sql・Gradle設定をコピーしたアプリ(Spring Boot 4.0.1 / Java 21 / Gradle 9.2.1 / Thymeleaf / JPA / PostgreSQL / Lombok) | 写経・改造する本体 |
-| `.vscode/` | VSCodeの起動設定(`launch.json`)。F5 で `Todolist7xApplication` が起動する | |
-| `tools/build_mobile.py`(+ `mobile_template.html`) | ソースをまとめてスマホ用ページを作る | ソースを直したら実行 |
+| `参考ソース/Todolist8b/` など | 参考書から取得した章ごとのサンプル(Eclipse/STSのプロジェクト) | 原本。変更しない。git対象外 |
+| `参考ソース/back/todolist7x/` | 前の章(7章)のアプリ。ソースノートの「元」 | 読み取り専用。変更しない |
+| `todolist8b/` | `参考ソース/Todolist8b` から src・sql・Gradle設定をコピーしたアプリ(Spring Boot 4.0.1 / Java 21 / Gradle 9.2.1 / Thymeleaf / JPA / PostgreSQL / Lombok)。ソースノートの「改修後」 | 写経・改造する本体 |
+| `.vscode/` | VSCodeの起動設定(`launch.json`)。F5 で `Todolist8bApplication` が起動する。`参考ソース/` はJavaの読み込み対象外 | |
+| `tools/build_mobile.py`(+ `mobile_template.html`) | 元と改修後を比較して、スマホ用ページを作る。比較する2フォルダはスクリプト先頭の `VERSIONS` で指定 | ソースを直したら実行 |
 | `公開用/ソースコード.html` | Artifactで公開するファイル(自動生成) | 手で直さない |
 | `指示書.txt` | プロジェクト作成時の依頼文 | 参考 |
 
@@ -38,8 +39,9 @@ Spring Boot学習(シーズン2)用フォルダ `springlearn_season2/` で作業
 
 - JDK 21(`C:\Program Files\Java\jdk-21`。Gradleのtoolchainが自動で使う。PATHの`java`は25)
 - DB: PostgreSQL 18、DB `tododb` / ユーザー `todouser`(前シーズンの todolist_ver1 と共用。`todo`テーブル)
-- `todolist7x/src/main/resources/application.properties` はパスワードを含むため git対象外。`application.properties.example` をコミットしている
-- コマンドで起動する場合: `cd todolist7x` → `.\gradlew.bat bootRun` → http://localhost:8080/todo
+- `application.properties` はパスワードを含むため、どのフォルダのものも git対象外(ルートの `.gitignore`)。代わりに `application.properties.example` をコミットしている
+- コマンドで起動する場合: `cd todolist8b` → `.\gradlew.bat bootRun` → http://localhost:8080/todo
+- 新しい章のサンプルを動かすときは、同じ手順で src・sql・Gradle設定(`gradle/`, `gradlew*`, `build.gradle`, `settings.gradle`)だけをルート直下にコピーし、`launch.json` と `build_mobile.py` の `VERSIONS` を書き換える
 
 ## スマホ用ページ(claude.ai の Artifact)
 
@@ -48,6 +50,7 @@ Spring Boot学習(シーズン2)用フォルダ `springlearn_season2/` で作業
 | ソースノート | https://claude.ai/artifact/Fz11HjhDUs6TsNBXdkV6bg | `公開用/ソースコード.html` |
 
 - ソースや `HISTORY.md` を直したら `py tools\build_mobile.py` を実行し、上の URL に再公開する(新しい URL を作らない。別の会話からは `url` を指定する)
+- 元 / 改修後 を切り替えて表示でき、改修後では追加行(緑)・変更行(青)、元では変更前(青)・削除行(赤)に色が付く。ファイル一覧では変更のあるファイルに印が付く
 - ページ内で行を選んで Claude に質問でき、質問と回答はページのDB(コレクション `qa`)に残る。PCで作業するときは `ArtifactData` で `qa` を読み、大事なものは `HISTORY.md` のQ&Aログに転記する
 - 非公開(本人のみ)
 

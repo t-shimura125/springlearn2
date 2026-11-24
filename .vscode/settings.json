@@ -6,6 +6,7 @@
     "**/.metadata/**",
     "**/archetype-resources/**",
     "**/META-INF/maven/**",
-    "**/sampleSource/**"
+    "**/sampleSource/**",
+    "**/参考ソース/**"
   ]
 }

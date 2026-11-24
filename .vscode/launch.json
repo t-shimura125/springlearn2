@@ -2,11 +2,11 @@
   "configurations": [
     {
       "type": "java",
-      "name": "Spring Boot-Todolist7xApplication<todolist7x>",
+      "name": "Spring Boot-Todolist8bApplication<todolist8b>",
       "request": "launch",
-      "cwd": "${workspaceFolder}/todolist7x",
-      "mainClass": "com.example.todolist.Todolist7xApplication",
-      "projectName": "Todolist7x",
+      "cwd": "${workspaceFolder}/todolist8b",
+      "mainClass": "com.example.todolist.Todolist8bApplication",
+      "projectName": "Todolist8b",
       "args": ""
     }
   ]
