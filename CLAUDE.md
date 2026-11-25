@@ -30,7 +30,7 @@ Spring Boot学習(シーズン2)用フォルダ `springlearn_season2/` で作業
 | `参考ソース/Todolist9/` など | 参考書から取得した最新章のサンプル(Eclipse/STSのプロジェクト) | 原本。変更しない。git対象外 |
 | `参考ソース/back/` | 前の章の原本(`todolist7x/`, `Todolist8b/`) | 読み取り専用。変更しない |
 | `todolist9/` | `参考ソース/Todolist9` から src・sql・Gradle設定をコピーしたアプリ(Spring Boot 4.0.1 / Java 21 / Gradle 9.2.1 / Thymeleaf / JPA / PostgreSQL / Lombok)。最新の版(v2) | 写経・改造する本体 |
-| `todolist8b/` | 前の版(v1)のアプリ。前の版の正本は git のタグ(v0 = タグ `v0` の `todolist7x/`、v1 = タグ `v1` の `todolist8b/`) | 変更しない |
+| (前の版) | 作業フォルダには置かない。正本は git のタグ(v0 = タグ `v0` の `todolist7x/`、v1 = タグ `v1` の `todolist8b/`)。見るときは `git show v1:todolist8b/…` | 変更しない |
 | `.vscode/` | VSCodeの起動設定(`launch.json`)。F5 で `Todolist9Application` が起動する。`参考ソース/` はJavaの読み込み対象外 | |
 | `tools/build_mobile.py`(+ `mobile_template.html`, `versions.json`) | git のタグから各版を読み、版どうしを比較してスマホ用ページを作る。版の一覧は `versions.json` | ソースを直したら実行 |
 | `公開用/ソースコード.html` | Artifactで公開するファイル(自動生成) | 手で直さない |
