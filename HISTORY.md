@@ -3,6 +3,14 @@
 学習の履歴ログ。演習アプリの進捗、つまずいたポイント・Q&A、次にやりたいことを都度追記していく。
 方針は`CLAUDE.md`を参照。
 
+## 版の一覧(ソースノートで切り替える版。正本は git のタグ)
+
+| 版 | 日付 | フォルダ | 変更メモ |
+|---|---|---|---|
+| v0 | 2026-11-16 | `todolist7x/` | 参考書7章のサンプル(元)。一覧・登録・更新・削除・検索・ページング |
+| v1 | 2026-11-24 | `todolist8b/` | 多言語対応(i18n)。画面の文言とエラーメッセージを言語別ファイルに外出し |
+| v2 | 2026-11-25 | `todolist9/` | 操作メッセージ(完了・警告・エラー)を画面上部に表示。表示部分はフラグメントで共通化 |
+
 ## 演習アプリ別ログ
 
 ### todolist7x(ToDoアプリ、参考書のサンプル)
@@ -35,6 +43,25 @@
 - `todoList.html` 先頭の `${#locale.language}=<span th:text="${#locale.language}">` … 今の言語を画面に出す**動作確認用**
 - `todoList.html` で `<hr>` が `</form>` の内側から外側に移動 … **特に狙いはない**(見た目もほぼ変わらない)
 
+### todolist9(参考書9章のサンプル。テーマ: 操作メッセージの表示)= v2
+
+- 2026-11-25: `参考ソース/Todolist9/` から src・sql・Gradle設定を `todolist9/` にコピー。`gradlew build`(テスト含む)成功。前回分の原本は `参考ソース/back/Todolist8b/` に移した
+- ソースノートを版の切り替え式(v0〜v2、比較元を選べる)に作り替えた
+
+#### 8章(v1) → 9章(v2)の変更ファイル(空白・インデントだけの違いは除く)
+
+| ファイル | 区分 | 変更の狙い(コードから読み取れる範囲) |
+|---|---|---|
+| `common/OpMsg.java` | 追加 | 画面に出すメッセージの入れ物。`msgType`("I"=情報、"W"=警告、"E"=エラー)と `msgText` の2つ。Lombok の `@Data` `@AllArgsConstructor` |
+| `i18n/OperationMessages(_en/_ja).properties` | 追加 | 操作メッセージの文言。キーは `msg.i.todo_created` のように「msg.種類.内容」。既定ファイル(言語なし)は無い |
+| `application.properties(.example)` | 変更 | `spring.messages.basename` に `i18n/OperationMessages` を追加 |
+| `controller/TodoListController.java` | 変更 | `MessageSource` を注入。検索で0件なら警告(W)、入力エラーならエラー(E)を `msg` として画面に渡す。登録・更新・削除の成功時は `RedirectAttributes.addFlashAttribute("msg", …)` で、リダイレクト先の一覧画面に情報(I)メッセージを渡す。コメントアウトされていた古い行を削除 |
+| `templates/fragments.html` | 追加 | `th:fragment="msg_area"` で、`msg` の種類に応じてアイコンと色付きの枠でメッセージを出す部品 |
+| `templates/todoList.html` / `todoForm.html` | 変更 | 先頭に `th:replace="~{fragments :: msg_area}"` で部品を差し込む。一覧の動作確認用の `${#locale.language}` 表示は削除 |
+| `static/css/style.css` | 変更 | `.info_msg` `.warn_msg` `.err_msg`(青・黄・赤の枠)と、アイコンと文字の縦位置をそろえる `.va` を追加 |
+| `static/icons/*.png` | 追加 | 情報・警告・エラーのアイコン画像3つ |
+| `settings.gradle` / `Todolist9Application.java` / テスト | 変更 | プロジェクト名・クラス名を 8b → 9 に変えただけ |
+
 ---
 
 ## つまずきポイント・Q&Aログ
@@ -47,4 +74,6 @@
 
 1. ソースノートで 7章 → 8章(i18n)の差分を読む。特に `MessageSource` と `Locale` がどこから来るか、`#{…}` の仕組み
 2. `todolist8b` を起動し、ブラウザの言語設定を英語にして表示とエラーメッセージが切り替わるのを確かめる
-3. 参考書の章に沿って、ソースを読み・写経する
+3. ソースノートで 8章 → 9章(v1 → v2)の差分を読む。特に `addFlashAttribute`(リダイレクトをまたいでメッセージを渡す仕組み)と、`th:fragment` / `th:replace`
+4. `todolist9` を起動し、登録・更新・削除・0件検索・入力エラーでメッセージが出るのを確かめる
+5. 参考書の章に沿って、ソースを読み・写経する

@@ -64,7 +64,18 @@ button:focus-visible, textarea:focus-visible, input:focus-visible, summary:focus
 .picker button.file { flex: 1; min-width: 0; text-align: left; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; display: flex; gap: 8px; align-items: center; }
 .picker .file .path { font-family: var(--font-code); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .picker .file .chev { margin-left: auto; color: var(--muted); flex: none; }
-/* 元 / 改修後 の切り替え */
+/* 版と比較元の選択 */
+.vrow { margin-top: 6px; display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.vrow select { min-width: 0; flex: 1; font: inherit; font-size: 14px; color: var(--fg); padding: 5px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.vrow .arrow { color: var(--muted); flex: none; }
+.vmemo { margin-top: 4px; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vlist { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.vlist li { display: flex; gap: 8px; align-items: baseline; }
+.vlist .vid { font-family: var(--font-code); font-weight: 700; flex: none; }
+.vlist .vdate { color: var(--muted); font-size: 12px; flex: none; }
+.vlist li.cur .vid { color: var(--accent); }
+.dir h2.chg { color: var(--chg-edge); font-family: var(--font-body); font-weight: 700; }
+/* 比較元 / 表示中の版 の切り替え */
 .ver { flex: none; display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .ver button { border: 0; background: none; padding: 6px 10px; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .ver button + button { border-left: 1px solid var(--line); }
@@ -189,10 +200,18 @@ details.entry .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap
     </div>
     <div class="picker" id="picker">
       <button class="file" id="fileBtn"><span class="path" id="curPath"></span><span class="chev">▾</span></button>
-      <div class="ver" role="group" aria-label="表示する版">
+      <div class="ver" role="group" aria-label="比較元と版のどちらを表示するか" id="sideSw">
         <button id="verOld" aria-pressed="false"></button>
         <button id="verNew" aria-pressed="true"></button>
       </div>
+    </div>
+    <div id="vbox">
+      <div class="vrow">
+        <select id="selBase" aria-label="比較元の版"></select>
+        <span class="arrow">→</span>
+        <select id="selVer" aria-label="表示する版"></select>
+      </div>
+      <div class="vmemo" id="vmemo"></div>
     </div>
   </header>
 
@@ -240,36 +259,75 @@ const store = {
 };
 
 const files = DATA.files;
-const V = DATA.versions;  // {old: {label, desc}, new: {label, desc}}
-// f.id は質問ログに残る識別子(元にあるファイルは「todolist7x/...」で、以前のノートと同じ)
-const byPath = Object.fromEntries(files.map(f => [f.id, f]));
-let ver = store.get('ver') === 'old' ? 'old' : 'new';   // 表示中の版
+const VERS = DATA.versions;                          // 古い順 [{id, date, desc, memo, dir}]
+const VI = Object.fromEntries(VERS.map((v, i) => [v.id, i]));
+const VM = Object.fromEntries(VERS.map(v => [v.id, v]));
+const latest = VERS[VERS.length - 1].id;
+// 質問ログに残るパス(各版の「フォルダ/…」)からファイルを引く。キーでも引ける
+const byPath = {};
+for (const f of files) { byPath[f.key] = f; for (const a of Object.values(f.at)) if (!byPath[a.path]) byPath[a.path] = f; }
+// 比較機能を入れる前の質問ログ(ver が old/new)は v0 / v1 への質問
+const LEGACY = { old: 'v0', new: 'v1' };
+
+let tgt = VM[store.get('tgt')] ? store.get('tgt') : latest;             // 表示する版
+let base = store.get('base');                                            // 比較元('' = 比較しない)
+if (base !== '' && !(VM[base] && VI[base] < VI[tgt])) base = VI[tgt] > 0 ? VERS[VI[tgt] - 1].id : '';
+let onBase = store.get('side') === 'base' && !!base;                    // 比較元の側を表示中か
+const shown = () => (onBase && base ? base : tgt);
 let cur = byPath[store.get('file')] || files.find(f => f.main) || files[0];
 let sel = null;          // {from, to} 1始まり
-let thread = null;       // 現在の会話 {id, file, ver, lines, turns:[{q,a}]}
+let thread = null;       // 現在の会話 {id, file, key, ver, tgt, base, lines, turns:[{q,a}]}
 let sample = null, db = null, ctl = null;
 let onlyChanged = store.get('onlyChanged') === '1';
 const STATUS = { mod: '変更', add: '追加', del: '削除', same: '変更なし' };
-const side = (f, v = ver) => f[v];                 // その版のファイル {path, name, text}(無ければ null)
-const anySide = f => f[ver] || f.old || f.new;     // 表示用(その版に無ければもう一方)
-const verLabel = v => `${V[v].label}(${V[v].desc})`;
+const vlabel = id => VM[id] ? `${id}(${VM[id].desc})` : id;
+const at = (f, v = shown()) => f.at[v] || null;                          // その版のファイル {path, name, b}
+const textOf = a => (a && a.b != null ? DATA.blobs[a.b] : null);
+const anyAt = f => at(f) || at(f, tgt) || (base && at(f, base)) || Object.values(f.at).pop();
+const inPair = f => !!(at(f, tgt) || (base && at(f, base)));
+const res = f => (base ? (DATA.pairs[base + '|' + tgt] || {})[f.key] : null);   // 比較元→版の差分(変更なしは null)
+const status = f => (f.doc ? 'same' : (res(f) || { st: 'same' }).st);
 
 $('built').textContent = '生成 ' + DATA.built;
 
-/* ---------- 元 / 改修後 の切り替え ---------- */
-$('verOld').textContent = V.old.label;
-$('verNew').textContent = V.new.label;
-$('verOld').title = V.old.desc;
-$('verNew').title = V.new.desc;
-function setVer(v) {
-  ver = v;
-  store.set('ver', v);
-  $('verOld').setAttribute('aria-pressed', String(v === 'old'));
-  $('verNew').setAttribute('aria-pressed', String(v === 'new'));
+/* ---------- 版・比較元の選択 ---------- */
+function renderVerUi() {
+  $('selVer').innerHTML = VERS.map(v => `<option value="${v.id}"${v.id === tgt ? ' selected' : ''}>${esc(vlabel(v.id))}${v.id === latest ? ' 最新' : ''}</option>`).join('');
+  $('selBase').innerHTML = VERS.filter(v => VI[v.id] < VI[tgt]).map(v => `<option value="${v.id}"${v.id === base ? ' selected' : ''}>比較元 ${esc(v.id)}</option>`).join('')
+    + `<option value=""${base ? '' : ' selected'}>比較しない</option>`;
+  $('sideSw').hidden = !base;
+  $('verOld').textContent = base ? base : '';
+  $('verNew').textContent = tgt;
+  $('verOld').title = base ? '比較元 ' + vlabel(base) : '';
+  $('verNew').title = vlabel(tgt);
+  $('verOld').setAttribute('aria-pressed', String(onBase));
+  $('verNew').setAttribute('aria-pressed', String(!onBase));
+  const v = VM[shown()];
+  $('vmemo').textContent = `${v.id} ${v.date}: ${v.memo}`;
+  store.set('tgt', tgt); store.set('base', base); store.set('side', onBase ? 'base' : 'tgt');
 }
-setVer(ver);
-$('verOld').onclick = () => { if (!ctl && ver !== 'old') { setVer('old'); open(cur); } };
-$('verNew').onclick = () => { if (!ctl && ver !== 'new') { setVer('new'); open(cur); } };
+function setVers(t, b, sideBase) {
+  tgt = t;
+  base = b && VI[b] < VI[t] ? b : '';
+  onBase = !!sideBase && !!base;
+  renderVerUi();
+}
+$('selVer').onchange = e => {
+  if (ctl) return renderVerUi();
+  const t = e.target.value;
+  // 比較元は、今のものが使えればそのまま、無理なら直前の版
+  setVers(t, base && VI[base] < VI[t] ? base : (VI[t] > 0 ? VERS[VI[t] - 1].id : ''), false);
+  refresh();
+};
+$('selBase').onchange = e => { if (ctl) return renderVerUi(); setVers(tgt, e.target.value, false); refresh(); };
+$('verOld').onclick = () => { if (!ctl && !onBase) { setVers(tgt, base, true); open(cur); } };
+$('verNew').onclick = () => { if (!ctl && onBase) { setVers(tgt, base, false); open(cur); } };
+function refresh() {
+  if (!inPair(cur) && !cur.doc) cur = files.find(f => f.main && inPair(f)) || files.find(inPair) || cur;
+  renderSummary();
+  open(cur);
+  if (!$('viewFiles').hidden) renderTree();
+}
 
 /* ---------- タブ ---------- */
 function show(tab) {
@@ -278,6 +336,7 @@ function show(tab) {
     $(v).hidden = t !== tab;
   }
   $('picker').hidden = tab !== 'tabCode';
+  $('vbox').hidden = tab === 'tabLog';
   $('askbar').hidden = tab !== 'tabCode';
   window.scrollTo(0, 0);
 }
@@ -289,41 +348,51 @@ $('fileBtn').onclick = () => { show('tabFiles'); renderTree(); };
 /* ---------- ファイル一覧 ---------- */
 function renderSummary() {
   const n = { mod: 0, add: 0, del: 0, same: 0 };
-  for (const f of files) if (!f.doc) n[f.status]++;
-  $('summary').innerHTML = `<div><b>${esc(V.old.label)}</b>(${esc(V.old.desc)})→ <b>${esc(V.new.label)}</b>(${esc(V.new.desc)})の比較</div>
-    <div class="counts"><span class="badge mod">変更</span>${n.mod} <span class="badge add">追加</span>${n.add} <span class="badge del">削除</span>${n.del} <span>変更なし ${n.same}</span></div>
-    <label><input type="checkbox" id="onlyChanged"${onlyChanged ? ' checked' : ''}> 変更のあるファイルだけ表示</label>
-    <div style="color: var(--muted); font-size: 12px">空白(インデント)だけの違いは差分に含めていません。</div>`;
-  $('onlyChanged').onchange = e => { onlyChanged = e.target.checked; store.set('onlyChanged', onlyChanged ? '1' : '0'); renderTree(); };
+  for (const f of files) if (!f.doc && inPair(f)) n[status(f)]++;
+  const vl = VERS.slice().reverse().map(v => `<li class="${v.id === tgt || v.id === base ? 'cur' : ''}"><span class="vid">${esc(v.id)}</span><span class="vdate">${esc(v.date)}</span><span>${esc(v.desc)}: ${esc(v.memo)}</span></li>`).join('');
+  const older = DATA.before ? `<div style="color: var(--muted); font-size: 12px">${esc(DATA.before.id)} 以前の版は git に残っています(ノートには最新${VERS.length}版だけを載せています)。</div>` : '';
+  const cmp = base
+    ? `<div><b>${esc(vlabel(base))}</b> → <b>${esc(vlabel(tgt))}</b> の比較</div>
+       <div class="counts"><span class="badge mod">変更</span>${n.mod} <span class="badge add">追加</span>${n.add} <span class="badge del">削除</span>${n.del} <span>変更なし ${n.same}</span></div>
+       <label><input type="checkbox" id="onlyChanged"${onlyChanged ? ' checked' : ''}> 変更のあるファイルだけ表示</label>
+       <div style="color: var(--muted); font-size: 12px">空白(インデント)・改行コードだけの違いは差分に含めていません。</div>`
+    : `<div><b>${esc(vlabel(tgt))}</b> を比較なしで表示中</div>`;
+  $('summary').innerHTML = `<ul class="vlist">${vl}</ul>${older}<hr style="border: 0; border-top: 1px solid var(--line); margin: 2px 0; width: 100%">${cmp}`;
+  if ($('onlyChanged')) $('onlyChanged').onchange = e => { onlyChanged = e.target.checked; store.set('onlyChanged', onlyChanged ? '1' : '0'); renderTree(); };
 }
 function renderTree() {
   const q = $('q').value.trim().toLowerCase();
   const groups = new Map();
   for (const f of files) {
-    if (onlyChanged && f.status === 'same') continue;
-    const s = anySide(f);
+    if (!inPair(f) && !f.doc) continue;
+    const st = status(f);
+    if (base && onlyChanged && st === 'same') continue;
+    const a = anyAt(f), text = textOf(a) || '';
     let hit = '';
     if (q) {
-      if (!s.path.toLowerCase().includes(q)) {
-        const i = s.text.toLowerCase().indexOf(q);
+      if (!a.path.toLowerCase().includes(q)) {
+        const i = text.toLowerCase().indexOf(q);
         if (i < 0) continue;
-        const ls = s.text.lastIndexOf('\n', i) + 1, le = s.text.indexOf('\n', i);
-        const lineNo = s.text.slice(0, i).split('\n').length;
-        const line = s.text.slice(ls, le < 0 ? undefined : le).trim();
+        const ls = text.lastIndexOf('\n', i) + 1, le = text.indexOf('\n', i);
+        const lineNo = text.slice(0, i).split('\n').length;
+        const line = text.slice(ls, le < 0 ? undefined : le).trim();
         const j = line.toLowerCase().indexOf(q);
         hit = `${lineNo}: ` + esc(line.slice(0, j)) + '<mark>' + esc(line.slice(j, j + q.length)) + '</mark>' + esc(line.slice(j + q.length));
       }
     }
-    const key = (f.sec || 'other') + '|' + f.dir;
+    // 変更のあるファイルは先頭の「変更のあるファイル」にまとめる
+    const key = base && st !== 'same' ? 'chg|' : (f.sec || 'other') + '|' + f.dir;
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push({ f, hit });
+    groups.get(key).push({ f, hit, st });
   }
   const tree = $('tree');
   tree.innerHTML = groups.size ? '' : '<p class="empty">見つかりませんでした。</p>';
-  // src/main 配下(アプリ本体)とそれ以外(ビルド設定など)を大見出しで分ける
-  const SEC = { main: ['アプリ本体', 'src/main 配下'], other: ['ビルド設定・SQL・テストなど', 'src/main 以外'] };
+  const SEC = { chg: [`変更のあるファイル`, base ? `${base} → ${tgt}` : ''], main: ['アプリ本体', 'src/main 配下'], other: ['ビルド設定・SQL・テストなど', 'src/main 以外'] };
+  const order = ['chg', 'main', 'other'];
+  const keys = [...groups.keys()].sort((x, y) => order.indexOf(x.split('|')[0]) - order.indexOf(y.split('|')[0]));
   const secBox = {};
-  for (const [key, list] of groups) {
+  for (const key of keys) {
+    const list = groups.get(key);
     const [sec, dir] = key.split('|');
     if (!secBox[sec]) {
       secBox[sec] = document.createElement('div');
@@ -334,11 +403,12 @@ function renderTree() {
     }
     const div = document.createElement('div');
     div.className = 'dir';
-    div.innerHTML = `<h2>${esc(dir || '(ルート)')}</h2><ul></ul>`;
-    for (const { f, hit } of list) {
+    div.innerHTML = sec === 'chg' ? '<ul></ul>' : `<h2>${esc(dir || '(ルート)')}</h2><ul></ul>`;
+    for (const { f, hit, st } of list) {
       const li = document.createElement('li');
-      const badge = f.status !== 'same' ? `<span class="badge ${f.status}">${STATUS[f.status]}</span>` : '';
-      li.innerHTML = `<button aria-current="${f === cur}"><span class="name">${esc(anySide(f).name)}</span>${badge}<span class="role">${esc(f.role || '')}</span></button>` + (hit ? `<div class="hit">${hit}</div>` : '');
+      const badge = base && st !== 'same' ? `<span class="badge ${st}">${STATUS[st]}</span>` : '';
+      const nm = sec === 'chg' ? (f.dir ? f.dir + '/' : '') + anyAt(f).name : anyAt(f).name;
+      li.innerHTML = `<button aria-current="${f === cur}"><span class="name">${esc(nm)}</span>${badge}<span class="role">${esc(f.role || '')}</span></button>` + (hit ? `<div class="hit">${hit}</div>` : '');
       li.querySelector('button').onclick = () => { open(f); show('tabCode'); };
       div.querySelector('ul').appendChild(li);
     }
@@ -369,32 +439,42 @@ function splitLines(html) {
   out.push(line + '</span>'.repeat(open.length));
   return out;
 }
-function renderLegend(f, s) {
+// 表示中の側の色: {marks: {行: 'add'|'chg'|'del'}, delAt: Set(この行の後ろで比較元の行が消えた)}
+function marksOf(f, a) {
+  const r = res(f), lines = textOf(a) == null ? 0 : textOf(a).split('\n').length;
+  const all = c => Object.fromEntries(Array.from({ length: lines }, (_, i) => [i + 1, c]));
+  if (!r || f.doc) return { marks: {}, delAt: new Set() };
+  if (r.st === 'add') return { marks: onBase ? {} : all('add'), delAt: new Set() };
+  if (r.st === 'del') return { marks: onBase ? all('del') : {}, delAt: new Set() };
+  return onBase ? { marks: r.ma || {}, delAt: new Set() } : { marks: r.mb || {}, delAt: new Set(r.da || []) };
+}
+function renderLegend(f, a) {
   const lg = $('legend');
-  const other = ver === 'old' ? 'new' : 'old';
-  if (!s) {
-    // 表示中の版にこのファイルが無い(追加されたファイルを元で見た / 削除されたファイルを改修後で見た)
-    const msg = f.status === 'add' ? `このファイルは${V.new.label}(${V.new.desc})で新しく追加されたファイルです。${V.old.label}にはありません。`
-      : `このファイルは${V.new.label}(${V.new.desc})では削除されています。`;
-    lg.innerHTML = `<div class="absent"><span>${esc(msg)}</span><button class="btn ghost" id="toOther">${esc(V[other].label)}で見る</button></div>`;
-    $('toOther').onclick = () => { setVer(other); open(f); };
+  const r = res(f), st = (r && r.stat) || {};
+  const sw = (c, t) => `<span><span class="sw ${c}"></span>${esc(t)}</span>`;
+  if (!a) {
+    // 表示中の版にこのファイルが無い(追加されたファイルを比較元で見た / 削除されたファイルを版で見た)
+    const msg = r && r.st === 'add' ? `このファイルは ${tgt} で新しく追加されました。${base} にはありません。`
+      : `このファイルは ${tgt} では削除されています。`;
+    const other = onBase ? tgt : base;
+    lg.innerHTML = `<div class="absent"><span>${esc(msg)}</span>${other ? `<button class="btn ghost" id="toOther">${esc(other)} で見る</button>` : ''}</div>`;
+    if ($('toOther')) $('toOther').onclick = () => { setVers(tgt, base, !onBase); open(f); };
+    lg.hidden = false;
     return;
   }
-  const st = f.stat, sw = (c, t) => `<span><span class="sw ${c}"></span>${esc(t)}</span>`;
   let h = '';
-  if (f.doc) h = '';
-  else if (f.status === 'same') h = `<span>${esc(V.old.label)}と${esc(V.new.label)}で同じ(変更なし)</span>`;
-  else if (f.status === 'add') h = sw('add', `${V.new.label}で新しく追加されたファイル(全${st.add}行)`);
-  else if (f.status === 'del') h = sw('del', `${V.new.label}では削除されたファイル(全${st.del}行)`);
-  else if (ver === 'new') {
+  if (f.doc || !base) h = '';
+  else if (!r) h = `<span>${esc(base)} と ${esc(tgt)} で同じ(変更なし)</span>`;
+  else if (r.st === 'add') h = onBase ? '' : sw('add', `${tgt} で新しく追加されたファイル(全${st.add || 0}行)`);
+  else if (r.st === 'del') h = sw('del', `${tgt} では削除されたファイル(全${st.del || 0}行)`);
+  else if (!onBase) {
     h = (st.add ? sw('add', `追加 ${st.add}行`) : '') + (st.chg ? sw('chg', `変更 ${st.chg}行`) : '')
-      + (st.del ? `<span><span class="dash"></span>ここで${esc(V.old.label)}の行を削除(${st.del}行。${esc(V.old.label)}で表示)</span>` : '');
+      + (st.del ? `<span><span class="dash"></span>ここで ${esc(base)} の行を削除(${st.del}行。${esc(base)} で表示)</span>` : '');
   } else {
-    const oc = Object.values(f.marks.old).filter(x => x === 'chg').length;
-    h = (oc ? sw('chg', `変更前 ${oc}行`) : '') + (st.del ? sw('del', `削除 ${st.del}行`) : '')
-      + (st.add ? `<span>追加 ${st.add}行は${esc(V.new.label)}で表示</span>` : '');
+    h = (st.chgOld ? sw('chg', `変更前 ${st.chgOld}行`) : '') + (st.del ? sw('del', `削除 ${st.del}行`) : '')
+      + (st.add ? `<span>追加 ${st.add}行は ${esc(tgt)} で表示</span>` : '');
   }
-  if (f.status !== 'same') h += '<button id="nextChg">次の変更 ↓</button>';
+  if (r && r.st === 'mod' && textOf(a) != null) h += '<button id="nextChg">次の変更 ↓</button>';
   lg.innerHTML = h;
   lg.hidden = !h;
   if ($('nextChg')) $('nextChg').onclick = nextChange;
@@ -414,25 +494,24 @@ function nextChange() {
 }
 function open(f) {
   cur = f; sel = null; thread = null; lastJump = null;
-  store.set('file', f.id);
-  const s = side(f), a = anySide(f);
-  $('curPath').textContent = a.path;
-  $('curName').textContent = a.name;
-  $('legend').hidden = false;
-  renderLegend(f, s);
+  store.set('file', f.key);
+  const a = at(f), d = anyAt(f), v = shown();
+  $('curPath').textContent = d.path;
+  $('curName').textContent = d.name;
+  renderLegend(f, a);
   $('thread').innerHTML = '';
-  if (!s) {
-    $('curSub').textContent = (f.role ? f.role + ' / ' : '') + V[ver].label + 'には無いファイル';
+  const text = textOf(a);
+  if (!a || text == null) {
+    $('curSub').textContent = (f.role ? f.role + ' / ' : '') + (a ? '画像ファイル(ノートには中身を載せていません) / ' + v : v + ' には無いファイル');
     $('code').hidden = true;
     $('code').innerHTML = '';
     renderCtx();
     return;
   }
   $('code').hidden = false;
-  $('curSub').textContent = (f.role ? f.role + ' / ' : '') + s.text.split('\n').length + '行 / ' + V[ver].label;
-  const marks = f.marks[ver] || {};
-  const delAt = new Set(ver === 'new' ? f.delAfter : []);
-  const rows = splitLines(highlight(s.text, f.lang));
+  $('curSub').textContent = (f.role ? f.role + ' / ' : '') + text.split('\n').length + '行 / ' + v + (base && !f.doc ? (onBase ? '(比較元)' : '') : '');
+  const { marks, delAt } = marksOf(f, a);
+  const rows = splitLines(highlight(text, f.lang));
   $('code').innerHTML = '<table><tbody>' + rows.map((h, i) => {
     const n = i + 1;
     const cls = [marks[n] || '', delAt.has(n) ? 'delbelow' : '', n === 1 && delAt.has(0) ? 'delabove' : ''].filter(Boolean).join(' ');
@@ -455,18 +534,19 @@ $('code').addEventListener('click', e => {
   renderCtx();
 });
 function linesLabel(s) { return s ? (s.from === s.to ? `${s.from}行目` : `${s.from}〜${s.to}行目`) : 'ファイル全体'; }
+const canAsk = () => textOf(at(cur)) != null;
 function renderCtx() {
   const c = $('ctx');
-  if (!side(cur)) {
-    c.innerHTML = `このファイルは${esc(V[ver].label)}に無いため、質問するときは版を切り替えてください。`;
+  if (!canAsk()) {
+    c.innerHTML = at(cur) ? '画像ファイルには質問できません。' : `このファイルは ${esc(shown())} に無いため、質問するときは版を切り替えてください。`;
   } else if (thread && thread.turns.length) {
-    c.innerHTML = `続けて質問: <b>${esc(thread.file.split('/').pop())}</b>(${esc(V[thread.ver].label)}) ${esc(linesLabel(thread.lines))}`;
+    c.innerHTML = `続けて質問: <b>${esc(thread.file.split('/').pop())}</b>(${esc(thread.ver)}) ${esc(linesLabel(thread.lines))}`;
     const b = document.createElement('button');
     b.textContent = '新しい質問にする';
     b.onclick = () => { thread = null; $('thread').innerHTML = ''; renderCtx(); };
     c.appendChild(b);
   } else {
-    c.innerHTML = `対象: <b>${esc(side(cur).name)}</b>(${esc(V[ver].label)}) ${esc(linesLabel(sel))}`;
+    c.innerHTML = `対象: <b>${esc(at(cur).name)}</b>(${esc(shown())}) ${esc(linesLabel(sel))}`;
   }
 }
 
@@ -517,33 +597,38 @@ function numbered(text, s) {
   const from = s ? s.from : 1, to = s ? s.to : ls.length;
   return ls.slice(from - 1, to).map((l, k) => `${from + k}: ${l}`).join('\n');
 }
-// 質問に渡すコードは、その会話の版(t.ver)に合わせる
+// 質問に渡すコードは、その会話の版(t.ver)に合わせる。差分は t.base → t.tgt
 function buildPrompt(t, question) {
-  const f = byPath[t.file] || cur;
-  const v = t.ver || 'old';
-  const s = f[v] || anySide(f);
-  const others = files.filter(x => x !== f && x[v]).map(x => `### ${x[v].path}\n${x[v].text}`).join('\n\n');
-  const changed = files.filter(x => x.status !== 'same').map(x => `- ${(x.new || x.old).path}(${STATUS[x.status]})`).join('\n');
-  const fileDiff = f.status === 'mod' ? f.diff
-    : f.status === 'add' ? `このファイルは${V.new.label}で新しく追加された(${V.old.label}には無い)`
-    : f.status === 'del' ? `このファイルは${V.new.label}で削除された` : '変更なし';
+  const f = byPath[t.key] || byPath[t.file] || cur;
+  const v = t.ver, a = f.at[v] || anyAt(f), text = textOf(a) || '';
+  const pr = t.base ? DATA.pairs[t.base + '|' + t.tgt] || {} : null;
+  const r = pr ? pr[f.key] : null;
+  const verList = VERS.map(x => `- ${x.id}(${x.date}、${x.desc}): ${x.memo}`).join('\n');
+  let fileDiff;
+  if (pr) fileDiff = `## このファイルの差分(${vlabel(t.base)} → ${vlabel(t.tgt)}。空白だけの違いは除く)\n${r ? r.diff : '変更なし'}`;
+  else if (v === VERS[0].id && DATA.before && DATA.prev && DATA.prev[f.key]) fileDiff = `## このファイルの、前の版(${DATA.before.id})からの差分\n${DATA.prev[f.key].diff}`;
+  else fileDiff = '## 差分\n(比較なしで表示中)';
+  const changed = pr ? Object.entries(pr).map(([k, x]) => `- ${(byPath[k] && anyAt(byPath[k]).path) || k}(${STATUS[x.st]})`).join('\n') || '(なし)' : '(比較なし)';
+  const others = files.filter(x => x !== f && textOf(x.at[v]) != null).map(x => `### ${x.at[v].path}\n${textOf(x.at[v])}`).join('\n\n');
   const rules = `${DATA.guide}
 
-# 今回の質問の対象
-表示中の版: ${verLabel(v)}
-ファイル: ${s.path}
-範囲: ${linesLabel(t.lines)}
-${t.lines ? '\n## 選択された行\n' + numbered(s.text, t.lines) + '\n' : ''}
-## 対象ファイル全体(行番号つき)
-${numbered(s.text, null)}
+# ノートに入っている版
+${verList}
 
-## このファイルの元からの差分(${verLabel('old')} → ${verLabel('new')}。空白だけの違いは除く)
+# 今回の質問の対象
+表示中の版: ${vlabel(v)}${t.base ? `(比較: ${t.base} → ${t.tgt})` : ''}
+ファイル: ${a.path}
+範囲: ${linesLabel(t.lines)}
+${t.lines ? '\n## 選択された行\n' + numbered(text, t.lines) + '\n' : ''}
+## 対象ファイル全体(行番号つき)
+${numbered(text, null)}
+
 ${fileDiff}
 
-# 元と改修後で変わったファイルの一覧
+# 比較元から変わったファイルの一覧
 ${changed}
 
-# 参考: 同じ版(${V[v].label})の他のファイル
+# 参考: 同じ版(${v})の他のファイル
 ${others}`;
   const turns = [{ role: 'user', content: rules + '\n\n# 質問\n' + (t.turns[0] ? t.turns[0].q : question) }];
   t.turns.forEach((x, k) => {
@@ -572,8 +657,8 @@ const ERR = {
 };
 async function ask() {
   const q = $('askText').value.trim();
-  if (!q || !sample || !side(cur)) return;
-  if (!thread) thread = { id: null, file: cur.id, ver, lines: sel, turns: [] };
+  if (!q || !sample || !canAsk()) return;
+  if (!thread) thread = { id: null, file: at(cur).path, key: cur.key, ver: shown(), tgt, base, lines: sel, turns: [] };
   const t = thread;
   const input = buildPrompt(t, q);
   $('askText').value = ''; autosize();
@@ -611,7 +696,9 @@ function disableAsk() {
 let logDocs = [];
 async function saveThread(t) {
   if (!db) return;
-  const body = { file: t.file, ver: t.ver, lines: t.lines, turns: t.turns, updated: Date.now() };
+  // ver: 質問した版、cmp: そのときの比較(比較元→版)、verLabel: 読みやすい版名
+  const body = { file: t.file, key: t.key, ver: t.ver, tgt: t.tgt, base: t.base || '', cmp: t.base ? `${t.base}→${t.tgt}` : '',
+                 verLabel: vlabel(t.ver), lines: t.lines, turns: t.turns, updated: Date.now() };
   try {
     if (t.id) await db.collection('qa').doc(t.id).set({ ...body, created: t.created });
     else { t.created = Date.now(); const ref = await db.collection('qa').add({ ...body, created: t.created }); t.id = ref.id; }
@@ -620,6 +707,12 @@ async function saveThread(t) {
   }
 }
 function fmt(ms) { const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; }
+// 質問ログの1件から {ver, tgt, base} を読む(比較機能を入れる前の ver: old/new にも対応)
+function logVers(x) {
+  if (x.ver && VM[x.ver] !== undefined && !LEGACY[x.ver]) return { ver: x.ver, tgt: x.tgt || x.ver, base: x.base || '' };
+  const ver = LEGACY[x.ver] || 'v0';
+  return { ver, tgt: 'v1', base: 'v0' };
+}
 function renderLog() {
   const log = $('log');
   $('logN').textContent = logDocs.length ? `(${logDocs.length})` : '';
@@ -627,20 +720,23 @@ function renderLog() {
   log.innerHTML = '';
   for (const d of logDocs) {
     const x = d.data();
+    const lv = logVers(x);
+    const f = byPath[x.key] || byPath[x.file];
+    const canOpen = f && VM[lv.ver] && f.at[lv.ver] && VM[lv.tgt];
     const det = document.createElement('details');
     det.className = 'entry';
-    // ver が無い質問は、比較機能を入れる前(元 todolist7x だけだった頃)のもの
-    const xv = x.ver === 'new' ? 'new' : 'old';
-    det.innerHTML = `<summary><span class="meta">${esc(fmt(x.updated || x.created))} ・ ${esc(V[xv].label)} ・ ${esc(x.file)} ${esc(linesLabel(x.lines))}</span><span class="first">${esc(x.turns && x.turns[0] ? x.turns[0].q : '')}</span></summary><div class="body"><div class="thread"></div><div class="acts"><button class="btn ghost">このコードを開いて続けて質問</button></div></div>`;
+    const cmp = x.cmp ? ` ・ 比較 ${x.cmp}` : '';
+    det.innerHTML = `<summary><span class="meta">${esc(fmt(x.updated || x.created))} ・ ${esc(lv.ver)}${esc(cmp)} ・ ${esc(x.file)} ${esc(linesLabel(x.lines))}</span><span class="first">${esc(x.turns && x.turns[0] ? x.turns[0].q : '')}</span></summary><div class="body"><div class="thread"></div><div class="acts">${canOpen ? '<button class="btn ghost">このコードを開いて続けて質問</button>' : `<span class="noask">この版(${esc(lv.ver)})はノートから外れたため開けません(git には残っています)。</span>`}</div></div>`;
     det.addEventListener('toggle', () => { if (det.open) renderThread(det.querySelector('.thread'), x); }, { once: true });
-    det.querySelector('.btn').onclick = () => {
-      const f = byPath[x.file];
-      if (!f || ctl) return;
-      setVer(xv);
+    const btn = det.querySelector('.btn');
+    if (btn) btn.onclick = () => {
+      if (ctl) return;
+      setVers(lv.tgt, lv.base, lv.ver !== lv.tgt);
+      renderSummary();
       open(f);
       if (x.lines) $('code').querySelectorAll('tr').forEach(tr => { const k = +tr.dataset.n; tr.classList.toggle('on', k >= x.lines.from && k <= x.lines.to); });
       sel = x.lines || null;
-      thread = { id: d.id, created: x.created, file: x.file, ver: xv, lines: x.lines || null, turns: x.turns.slice() };
+      thread = { id: d.id, created: x.created, file: x.file, key: f.key, ver: lv.ver, tgt: lv.tgt, base: lv.base, lines: x.lines || null, turns: x.turns.slice() };
       renderThread($('thread'), thread);
       renderCtx();
       show('tabCode');
@@ -650,6 +746,8 @@ function renderLog() {
 }
 
 /* ---------- 起動 ---------- */
+renderVerUi();
+if (!inPair(cur) && !cur.doc) cur = files.find(f => f.main && inPair(f)) || files.find(inPair);
 renderSummary();
 open(cur);
 renderLog();
