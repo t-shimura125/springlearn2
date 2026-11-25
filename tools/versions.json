@@ -1,0 +1,8 @@
+[
+  {"id": "v0", "tag": "v0", "dir": "todolist7x", "token": "Todolist7x", "date": "2026-11-16",
+   "desc": "7章 todolist7x", "memo": "参考書7章のサンプル(元)。一覧・登録・更新・削除・検索・ページング"},
+  {"id": "v1", "tag": "v1", "dir": "todolist8b", "token": "Todolist8b", "date": "2026-11-24",
+   "desc": "8章 todolist8b", "memo": "多言語対応(i18n)。画面の文言とエラーメッセージを言語別ファイルに外出し"},
+  {"id": "v2", "tag": "v2", "dir": "todolist9", "token": "Todolist9", "date": "2026-11-25",
+   "desc": "9章 todolist9", "memo": "操作メッセージ(完了・警告・エラー)を画面上部に表示。表示部分はフラグメントで共通化"}
+]
